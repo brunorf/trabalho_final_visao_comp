@@ -26,9 +26,9 @@ class SemaforoInteligenteEnv(gym.Env):
         self.ciclos_atuais = 0
         self.max_ciclos = 1000
 
-        self.esp_34 = 0.0
-        self.esp_152 = 0.0
-        self.esp_92 = 0.0
+        self.espera_via_ambulancia = 0.0
+        self.espera_via_oposta = 0.0
+        self.espera_via_perpendicular = 0.0
 
         # 2. INTEGRAÇÃO CARLA
         print("[SISTEMA] Conectando ao CARLA...")
@@ -394,7 +394,7 @@ class SemaforoInteligenteEnv(gym.Env):
     def _extrair_estado_da_imagem(self):
         veiculos_ativos = [v for v in self.lista_atores if v is not None and v.is_alive and v.type_id.startswith('vehicle')]
 
-        fila_34, fila_152, fila_92 = 0, 0, 0
+        fila_via_ambulancia, fila_via_oposta, fila_via_perpendicular = 0, 0, 0
         tem_amb, conf_amb, dist_amb = 0.0, 0.0, 150.0
 
         ids_amb_ativos = {v.id for v in veiculos_ativos if 'ambulance' in v.type_id}
@@ -407,11 +407,11 @@ class SemaforoInteligenteEnv(gym.Env):
 
             if 'ambulance' not in v.type_id and vel < self.LIMIAR_VELOCIDADE_FILA:
                 if via == self.VIA_AMBULANCIA:
-                    fila_34 += 1
+                    fila_via_ambulancia += 1
                 elif via == self.VIA_OPOSTA:
-                    fila_152 += 1
+                    fila_via_oposta += 1
                 elif via == self.VIA_PERPENDICULAR:
-                    fila_92 += 1
+                    fila_via_perpendicular += 1
 
             if 'ambulance' in v.type_id:
                 _, s_amb, _ = self._metrica_para_trilha(loc, self.trilhas_vias[self.VIA_AMBULANCIA])
@@ -423,12 +423,25 @@ class SemaforoInteligenteEnv(gym.Env):
                     conf_amb = 1.0
                     dist_amb = loc.distance(self.posicao_cruzamento)
 
-        self.esp_34  = np.clip(self.esp_34 + 1.0 if fila_34 > 0 else max(0.0, self.esp_34 - 0.5), 0.0, 100.0)
-        self.esp_152 = np.clip(self.esp_152 + 1.0 if fila_152 > 0 else max(0.0, self.esp_152 - 0.5), 0.0, 100.0)
-        self.esp_92  = np.clip(self.esp_92 + 1.0 if fila_92 > 0 else max(0.0, self.esp_92 - 0.5), 0.0, 100.0)
+        self.espera_via_ambulancia = np.clip(
+            self.espera_via_ambulancia + 1.0 if fila_via_ambulancia > 0 else max(0.0, self.espera_via_ambulancia - 0.5),
+            0.0,
+            100.0,
+        )
+        self.espera_via_oposta = np.clip(
+            self.espera_via_oposta + 1.0 if fila_via_oposta > 0 else max(0.0, self.espera_via_oposta - 0.5),
+            0.0,
+            100.0,
+        )
+        self.espera_via_perpendicular = np.clip(
+            self.espera_via_perpendicular + 1.0 if fila_via_perpendicular > 0 else max(0.0, self.espera_via_perpendicular - 0.5),
+            0.0,
+            100.0,
+        )
 
-        return np.array([fila_34, fila_152, fila_92, 
-                        self.esp_34, self.esp_152, self.esp_92, 
+        # Mantem a ordem do vetor de observacao para compatibilidade com o modelo.
+        return np.array([fila_via_ambulancia, fila_via_oposta, fila_via_perpendicular,
+                        self.espera_via_ambulancia, self.espera_via_oposta, self.espera_via_perpendicular,
                         tem_amb, dist_amb, conf_amb], dtype=np.float32)
 
     def _gerenciar_transito(self):
@@ -436,7 +449,7 @@ class SemaforoInteligenteEnv(gym.Env):
         ambulancias_ativas = [v for v in veiculos_ativos if 'ambulance' in v.type_id and v.id not in self.ambulancias_ja_passaram]
 
         # Gatilho de emergência (ex.: via 34 com fila ou pulsos temporais)
-        fila_34_gt = sum(
+        fila_via_ambulancia_gt = sum(
             1 for v in veiculos_ativos
             if 'ambulance' not in v.type_id
             and self._classificar_via_veiculo(v.get_location()) == self.VIA_AMBULANCIA
@@ -444,7 +457,7 @@ class SemaforoInteligenteEnv(gym.Env):
         )
 
         if len(ambulancias_ativas) == 0 and not self.ambulancia_pendente:
-            if fila_34_gt >= 1 or (self.contador_frames % 300 == 0 and self.contador_frames > 100):
+            if fila_via_ambulancia_gt >= 1 or (self.contador_frames % 300 == 0 and self.contador_frames > 100):
                 self.ambulancia_pendente = True
 
         if self.ambulancia_pendente:
@@ -535,9 +548,13 @@ class SemaforoInteligenteEnv(gym.Env):
         reward = self._calcular_recompensa(novo_estado, action) - custo_troca
 
         if self.ciclos_atuais % 10 == 0:
-            f34, f152, f92 = novo_estado[0], novo_estado[1], novo_estado[2]
+            fila_via_ambulancia, fila_via_oposta, fila_via_perpendicular = novo_estado[0], novo_estado[1], novo_estado[2]
             acoes = ["Via 34(Amb)", "Via 152", "Via 92"]
-            print(f"⚙️ Step {self.ciclos_atuais:04d} | Ação: {acoes[action]:<12} | Filas: 34={f34:.0f} 152={f152:.0f} 92={f92:.0f} | Reward: {reward:+06.2f}")
+            print(
+                f"⚙️ Step {self.ciclos_atuais:04d} | Ação: {acoes[action]:<12} | "
+                f"Filas: amb={fila_via_ambulancia:.0f} oposta={fila_via_oposta:.0f} perpendicular={fila_via_perpendicular:.0f} | "
+                f"Reward: {reward:+06.2f}"
+            )
 
         terminated = False
         truncated = bool(self.ciclos_atuais >= self.max_ciclos)
@@ -547,7 +564,9 @@ class SemaforoInteligenteEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.ciclos_atuais = 0
-        self.esp_34 = self.esp_152 = self.esp_92 = 0.0
+        self.espera_via_ambulancia = 0.0
+        self.espera_via_oposta = 0.0
+        self.espera_via_perpendicular = 0.0
         self.contador_frames = 0
         self.ambulancia_pendente = False
         self.ambulancias_ja_passaram.clear()
@@ -576,11 +595,21 @@ class SemaforoInteligenteEnv(gym.Env):
         return self.estado_atual, {}
 
     def _calcular_recompensa(self, estado, acao):
-        fila_34, fila_152, fila_92, esp_34, esp_152, esp_92, tem_amb, dist_amb, conf_amb = estado
+        (
+            fila_via_ambulancia,
+            fila_via_oposta,
+            fila_via_perpendicular,
+            espera_via_ambulancia,
+            espera_via_oposta,
+            espera_via_perpendicular,
+            tem_amb,
+            dist_amb,
+            conf_amb,
+        ) = estado
         reward = 0.0
         
         # Penalidade suavizada pelo tráfego normal
-        total_filas = fila_34 + fila_152 + fila_92
+        total_filas = fila_via_ambulancia + fila_via_oposta + fila_via_perpendicular
         reward -= total_filas * 0.5  
         
         # Punição severa se a ambulância estiver presente e a via 34 NÃO estiver aberta
@@ -591,7 +620,7 @@ class SemaforoInteligenteEnv(gym.Env):
             else:
                 reward += 30.0
         else:
-            max_espera = max(esp_34, esp_152, esp_92)
+            max_espera = max(espera_via_ambulancia, espera_via_oposta, espera_via_perpendicular)
             if max_espera > 30.0:
                 reward -= max_espera * 0.2
 
