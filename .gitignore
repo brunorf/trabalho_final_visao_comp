@@ -1,0 +1,75 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+build/
+dist/
+wheels/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+
+# -------------------------
+# Virtual envs / local tools
+# -------------------------
+.venv/
+venv/
+env/
+.python-version
+.ipynb_checkpoints/
+
+# -------------------------
+# CARLA / treinamento (grandes artefatos)
+# -------------------------
+*.pt
+*.pth
+*.onnx
+*.engine
+*.pkl
+*.zip
+
+# Datasets e saídas de treino
+carla_dataset_v2/
+carla_debug/
+carla_fixed/
+carla_robust/
+carsdataset/
+dataset/
+dataset_carla_final/
+dataset_final_carla/
+novo_dataset/
+runs/
+logs/
+modelos/
+
+# Pastas pesadas não essenciais para o código principal
+ml-depth-pro/
+qwen/
+rotulos/dataset_rotulado/
+
+# -------------------------
+# Imagens/arquivos temporários locais
+# -------------------------
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+Imagem colada.png
+spawn_refs.json
+
+# -------------------------
+# OS/editor
+# -------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
