@@ -48,6 +48,9 @@ dataset_final_carla/
 novo_dataset/
 runs/
 logs/
+logs.*/
+**/logs.*/
+events.out.tfevents.*
 modelos/
 
 # Pastas pesadas não essenciais para o código principal
